@@ -1,64 +1,192 @@
 import { useReducer } from "react";
 import DigitButton from "./DigitButton";
+import OperationButton from "./OperationButton";
 import "./styles.css";
 
 export const ACTIONS = {
-  ADD_DIGIT: "add_digit",
-  CHOOSE_OPERATOR: "choose_operator",
-  DEL_DIGIT: "del_digit",
-  CLEAR_CALC: "clear_calc",
+  ADD_DIGIT: "add-digit",
+  CHOOSE_OPERATION: "choose-operation",
+  CLEAR: "clear",
+  DELETE_DIGIT: "delete-digit",
   EVALUATE: "evaluate",
 };
 
+function reducer(state, { type, payload }) {
+  switch (type) {
+    case ACTIONS.ADD_DIGIT:
+      // We enter the overwite state, when we have just pressed "="
+      // bcoz after that, when u type any digit, we must start fresh
+      // for the currentOperand and then make overwrite false
+      if (state.overwrite) {
+        return {
+          ...state,
+          currentOperand: payload.digit,
+          overwrite: false,
+        };
+      }
+      if (payload.digit === "0" && state.currentOperand === "0") {
+        return state;
+      }
+      if (payload.digit === "." && state.currentOperand.includes(".")) {
+        return state;
+      }
+
+      return {
+        ...state,
+        currentOperand: `${state.currentOperand || ""}${payload.digit}`,
+      };
+    case ACTIONS.CHOOSE_OPERATION:
+      if (state.currentOperand == null && state.previousOperand == null) {
+        return state;
+      }
+
+      if (state.currentOperand == null) {
+        return {
+          ...state,
+          operation: payload.operation,
+        };
+      }
+
+      if (state.previousOperand == null) {
+        return {
+          ...state,
+          operation: payload.operation,
+          previousOperand: state.currentOperand,
+          currentOperand: null,
+        };
+      }
+
+      return {
+        ...state,
+        previousOperand: evaluate(state),
+        operation: payload.operation,
+        currentOperand: null,
+      };
+    case ACTIONS.CLEAR:
+      return {};
+    case ACTIONS.DELETE_DIGIT:
+      //when we have just pressed "=", then when u click on del
+      // the whole, current operand must become null
+      if (state.overwrite) {
+        return {
+          ...state,
+          overwrite: false,
+          currentOperand: null,
+        };
+      }
+      if (state.currentOperand == null) return state;
+      if (state.currentOperand.length === 1) {
+        return { ...state, currentOperand: null };
+      }
+
+      return {
+        ...state,
+        currentOperand: state.currentOperand.slice(0, -1),
+      };
+    case ACTIONS.EVALUATE:
+      if (
+        state.operation == null ||
+        state.currentOperand == null ||
+        state.previousOperand == null
+      ) {
+        return state;
+      }
+      // we are entering overwrite, state when we use "="
+      return {
+        ...state,
+        overwrite: true,
+        previousOperand: null,
+        operation: null,
+        currentOperand: evaluate(state),
+      };
+  }
+}
+
+function evaluate({ currentOperand, previousOperand, operation }) {
+  const prev = parseFloat(previousOperand);
+  const current = parseFloat(currentOperand);
+  if (isNaN(prev) || isNaN(current)) return "";
+  let computation = "";
+  switch (operation) {
+    case "+":
+      computation = prev + current;
+      break;
+    case "-":
+      computation = prev - current;
+      break;
+    case "*":
+      computation = prev * current;
+      break;
+    case "÷":
+      computation = prev / current;
+      break;
+  }
+
+  return computation.toString();
+}
+
+//given fractionDigits to 0 =>rounded of floor number, i.e
+// ignore the decimal
+const INTEGER_FORMATTER = new Intl.NumberFormat("en-us", {
+  maximumFractionDigits: 0,
+});
+
+function formatOperand(operand) {
+  if (operand == null) return;
+  const [integer, decimal] = operand.split(".");
+  if (decimal == null) return INTEGER_FORMATTER.format(integer);
+  //as we ignored the decimal in format, now we are appending it.
+  // all this is done, so that only the part before decimal
+  //have the have the formatting with commas, i.e
+  // 1,00,000 like this with the commas, and the decimal part
+  //will not have this formatting
+  return `${INTEGER_FORMATTER.format(integer)}.${decimal}`;
+}
+
 function App() {
-  const initialState = {
-    previousOperand: "",
-    currentOperand: "",
-    operation: "",
-  };
-  const reducer = (state, { type, payload }) => {
-    switch (type) {
-      case ACTIONS.ADD_DIGIT:
-        return {
-          ...state,
-          currentOperand: `${state.currentOperand}${payload.digit}`,
-        };
+  const [{ currentOperand, previousOperand, operation }, dispatch] = useReducer(
+    reducer,
+    {}
+  );
 
-      case ACTIONS.DEL_DIGIT:
-        return {
-          ...state,
-          currentOperand: `${state.currentOperand}`,
-        };
-
-      // state.
-    }
-  };
-  const [state, dispatch] = useReducer(reducer, initialState);
   return (
     <div className="calculator-grid">
       <div className="output">
-        <div className="previous-operand">123,122</div>
-        <div className="current-operand">256,652</div>
+        <div className="previous-operand">
+          {formatOperand(previousOperand)} {operation}
+        </div>
+        <div className="current-operand">{formatOperand(currentOperand)}</div>
       </div>
-      <button className="spans-two">AC</button>
-      <button>DEL</button>
-      <button>/</button>
-
-      <DigitButton digit="1" dispatch={dispatch}></DigitButton>
-      <DigitButton digit="2" dispatch={dispatch}></DigitButton>
-      <DigitButton digit="3" dispatch={dispatch}></DigitButton>
-      <button>*</button>
-      <DigitButton digit="4" dispatch={dispatch}></DigitButton>
-      <DigitButton digit="5" dispatch={dispatch}></DigitButton>
-      <DigitButton digit="6" dispatch={dispatch}></DigitButton>
-      <button>+</button>
-      <DigitButton digit="7" dispatch={dispatch}></DigitButton>
-      <DigitButton digit="8" dispatch={dispatch}></DigitButton>
-      <DigitButton digit="9" dispatch={dispatch}></DigitButton>
-      <button>-</button>
-      <DigitButton digit="." dispatch={dispatch}></DigitButton>
-      <DigitButton digit="0" dispatch={dispatch}></DigitButton>
-      <button className="spans-two">=</button>
+      <button
+        className="span-two"
+        onClick={() => dispatch({ type: ACTIONS.CLEAR })}
+      >
+        AC
+      </button>
+      <button onClick={() => dispatch({ type: ACTIONS.DELETE_DIGIT })}>
+        DEL
+      </button>
+      <OperationButton operation="÷" dispatch={dispatch} />
+      <DigitButton digit="1" dispatch={dispatch} />
+      <DigitButton digit="2" dispatch={dispatch} />
+      <DigitButton digit="3" dispatch={dispatch} />
+      <OperationButton operation="*" dispatch={dispatch} />
+      <DigitButton digit="4" dispatch={dispatch} />
+      <DigitButton digit="5" dispatch={dispatch} />
+      <DigitButton digit="6" dispatch={dispatch} />
+      <OperationButton operation="+" dispatch={dispatch} />
+      <DigitButton digit="7" dispatch={dispatch} />
+      <DigitButton digit="8" dispatch={dispatch} />
+      <DigitButton digit="9" dispatch={dispatch} />
+      <OperationButton operation="-" dispatch={dispatch} />
+      <DigitButton digit="." dispatch={dispatch} />
+      <DigitButton digit="0" dispatch={dispatch} />
+      <button
+        className="span-two"
+        onClick={() => dispatch({ type: ACTIONS.EVALUATE })}
+      >
+        =
+      </button>
     </div>
   );
 }
